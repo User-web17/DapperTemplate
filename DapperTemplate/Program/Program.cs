@@ -1,8 +1,5 @@
 ﻿using Dapper;
 using DapperTemplate.Entitites;
-using DapperTemplate.Repositories;
-using DapperTemplate.Services;
-using DapperTemplate.UI;
 using Microsoft.Data.SqlClient;
 
 namespace DapperTemplate.Program
@@ -32,12 +29,35 @@ namespace DapperTemplate.Program
 
             //AddVisitorWithPassport(connection, visitor);
 
-            var visitors = GetAllVisitors(connection);
+            //var visitors = GetAllVisitors(connection);
 
-            foreach (var visitor in visitors)
-            {
-                Console.WriteLine(visitor);
-            }
+            //foreach (var visitor in visitors)
+            //{
+            //    Console.WriteLine(visitor);
+            //}
+
+            //Author author = new Author()
+            //{
+            //    FullName = "Lina Kostenko",
+            //    BirthDate = new DateTime(1930, 3, 19),
+            //    Books = new List<Book>()
+            //    {
+            //        new Book{Title = "Ping-Pong"},
+            //        new Book{Title = "Out There Are Planets Far Beyond Our View"},
+            //        new Book{Title = "How Bitter Is the Wine"}
+            //    }
+            //};
+
+            //AddAuthorWithBooks(connection, author);
+
+            //var authors = GetAllAuthors(connection);
+
+            //foreach (var author in authors)
+            //{
+            //    Console.WriteLine(author.ToString());
+            //}
+
+
         }
 
         public static void AddVisitorWithPassport(SqlConnection conn, Visitor visitor)
@@ -86,6 +106,66 @@ namespace DapperTemplate.Program
                 );
 
             return result.ToList();
+        }
+
+        public static List<Author> GetAllAuthors(SqlConnection conn)
+        {
+            string query = @"
+                    SELECT A.Id, A.FullName, A.BirthDate, B.Id, B.Title, B.AuthorId
+                    FROM Authors A 
+                    LEFT JOIN Books B ON A.Id = B.AuthorId 
+                ";
+
+            var authorsMap = new Dictionary<int, Author>();
+
+            var result = conn.Query<Author, Book, Author>(query,
+                (a, b) =>
+                {
+                    if (!authorsMap.TryGetValue(a.Id, out Author author))
+                    {
+                        author = a;
+                        author.Books = new List<Book>();
+                        authorsMap.Add(a.Id, author);
+                    }
+
+                    if (b != null)
+                    {
+                        author.Books.Add(b);
+                    }
+
+                    return author;
+                },
+                splitOn: "Id"
+                ).Distinct();
+
+            return result.ToList();
+        }
+
+        public static void AddAuthorWithBooks(SqlConnection conn, Author author)
+        {
+            var transaction = conn.BeginTransaction();
+
+            string insertAuthor = @"
+                    INSERT INTO Authors (FullName, BirthDate)
+                    OUTPUT Inserted.Id
+                    VALUES (@FullName, @BirthDate)
+                ";
+
+            int authorId = conn.ExecuteScalar<int>(insertAuthor, author, transaction);
+
+            for (int i = 0; i < author.Books.Count; i++)
+            {
+                author.Books[i].AuthorId = authorId;
+            }
+
+            string insertBooks = @"
+                    INSERT INTO Books (Title, AuthorId)
+                    VALUES (@Title, @AuthorId)
+                ";
+
+            conn.Execute(insertBooks, author.Books, transaction);
+
+            transaction.Commit();
         }
     }
 }
