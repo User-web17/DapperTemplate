@@ -8,11 +8,11 @@ namespace DapperTemplate.Entitites
     {
         public int Id { get; set; }
         public string Title { get; set; } = null!;
-        public string Author { get; set; } = null!;
+        public int AuthorId { get; set; }
 
         public override string ToString()
         {
-            return $"Title: {Title}\nAuthor: {Author}";
+            return $"{Title} | {AuthorId}";
         }
     }
 }

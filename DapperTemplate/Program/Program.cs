@@ -10,36 +10,82 @@ namespace DapperTemplate.Program
     public class Program
     {
         private static string connectionString = @"Data Source=(localdb)\MSSQLLocalDB;
-            Initial Catalog=DapperDemo;
+            Initial Catalog=DapperLibrary;
             Integrated Security=True;
             TrustServerCertificate=True;";
 
         static void Main(string[] args)
         {
-            var connection = new SqlConnection(connectionString);
+            using SqlConnection connection = new SqlConnection(connectionString);
+            connection.Open();
 
-            IBookRepository repo = new BookRepository(connection);
-            BookService service = new BookService(repo);
+            //Visitor visitor = new Visitor()
+            //{
+            //    FullName = "Anton Pivko",
+            //    PhoneNumber = "0506789990",
+            //    BirthDate = new DateTime(1999, 10, 10),
+            //    passport = new Passport()
+            //    {
+            //        PassportNumber = "111111111"
+            //    }
+            //};
 
-            BookMenu menu = new BookMenu(service);
-            menu.Start();
+            //AddVisitorWithPassport(connection, visitor);
+
+            var visitors = GetAllVisitors(connection);
+
+            foreach (var visitor in visitors)
+            {
+                Console.WriteLine(visitor);
+            }
         }
 
-        public static void CreateBooksTable(SqlConnection connection)
+        public static void AddVisitorWithPassport(SqlConnection conn, Visitor visitor)
         {
-            string sql = @"
-                IF NOT EXISTS (
-                    SELECT * FROM sys.tables WHERE name = 'Books'
-                )
-                BEGIN
-                    CREATE TABLE Books (
-                        Id INT PRIMARY KEY IDENTITY(1,1),
-                        Title NVARCHAR(200) NOT NULL,
-                        Author NVARCHAR(200) NOT NULL
-                    );
-                END";
+            string insertVisitor = @"
+                    INSERT INTO Visitors (FullName, PhoneNumber, BirthDate)
+                    OUTPUT Inserted.Id
+                    VALUES (@FullName, @PhoneNumber, @BirthDate);
+                ";
 
-            connection.Execute(sql);
+            int visitorId = conn.ExecuteScalar<int>(insertVisitor, visitor);
+
+            Console.WriteLine($"[LOG] Visitor inserted. Id: {visitorId}.");
+
+            string insertPassport = @"
+                    INSERT INTO Passports (PassportNumber, VisitorId)
+                    OUTPUT Inserted.Id
+                    VALUES (@PassportNumber, @VisitorId)
+                ";
+
+            visitor.passport.VisitorId = visitorId;
+
+            int passportId = conn.ExecuteScalar<int>(insertPassport, visitor.passport);
+
+            Console.WriteLine($"[LOG] Passport inserted. Id: {passportId}.");
+        }
+
+        public static List<Visitor> GetAllVisitors(SqlConnection conn)
+        {
+            string query = @"
+                SELECT V.Id, V.FullName, V.PhoneNumber, V.BirthDate, P.Id, P.PassportNumber, P.VisitorId
+                FROM Visitors V
+                JOIN Passports P ON V.Id = P.VisitorId;
+            ";
+
+            // І тип параметр - І таблиця у JOIN
+            // II тип параметр - II таблиця у JOIN
+            // III тип параметр - тип даних результату
+            var result = conn.Query<Visitor, Passport, Visitor>(query,
+                (v, p) =>
+                {
+                    v.passport = p;
+                    return v;
+                },
+                splitOn: "Id"
+                );
+
+            return result.ToList();
         }
     }
 }
